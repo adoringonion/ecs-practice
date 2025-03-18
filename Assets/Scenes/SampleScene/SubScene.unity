@@ -566,7 +566,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   mobPrefab: {fileID: 7737084399158260589, guid: 37985a753bf4348ae9f7a5b7c92c5367, type: 3}
-  timeBetweenSpawns: 1
+  timeBetweenSpawns: 0.1
   isActive: 1
 --- !u!4 &1653423797
 Transform:

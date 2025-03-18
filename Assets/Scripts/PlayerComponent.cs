@@ -1,10 +1,12 @@
 using Unity.Entities;
+using Unity.Mathematics;
 
-namespace DefaultNamespace
+public struct PlayerComponent : IComponentData
 {
-    public struct PlayerComponent : IComponentData
-    {
-        public int hp;
-        public Entity prefab;
-    }
+    public float currentSpeed;
+    public float maxSpeed;
+    public float acceleration;
+    public float deceleration;
+    public float rotationSpeed;
+    public float3 forward;
 }

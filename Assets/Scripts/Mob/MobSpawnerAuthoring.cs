@@ -9,15 +9,15 @@ namespace Mob
         [SerializeField] float timeBetweenSpawns = 1f;
         [SerializeField] bool isActive = true;
 
-        class MobSpawnerAuthoringBaker : Baker<MobSpawnerAuthoring>
+        private class MobSpawnerAuthoringBaker : Baker<MobSpawnerAuthoring>
         {
             public override void Bake(MobSpawnerAuthoring authoring)
             {
-                var entity = GetEntity(TransformUsageFlags.None);
+                var entity = GetEntity(TransformUsageFlags.Dynamic);
 
                 var spawnerComponent = new MobSpawner()
                 {
-                    mobPrefabEntity = GetEntity(authoring.mobPrefab, TransformUsageFlags.None),
+                    mobPrefabEntity = GetEntity(authoring.mobPrefab, TransformUsageFlags.Dynamic),
                     timeUntilNextSpawn = authoring.timeBetweenSpawns,
                     isActive = authoring.isActive
                 };
