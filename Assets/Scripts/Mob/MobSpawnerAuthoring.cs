@@ -17,9 +17,9 @@ namespace Mob
 
                 var spawnerComponent = new MobSpawner()
                 {
-                    mobPrefabEntity = GetEntity(authoring.mobPrefab, TransformUsageFlags.Dynamic),
-                    timeUntilNextSpawn = authoring.timeBetweenSpawns,
-                    isActive = authoring.isActive
+                    MobPrefabEntity = GetEntity(authoring.mobPrefab, TransformUsageFlags.Dynamic),
+                    TimeUntilNextSpawn = authoring.timeBetweenSpawns,
+                    IsActive = authoring.isActive
                 };
                 
                 AddComponent(entity, spawnerComponent);

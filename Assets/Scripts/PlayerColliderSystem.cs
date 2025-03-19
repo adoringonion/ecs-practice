@@ -1,3 +1,5 @@
+using System;
+using DefaultNamespace;
 using DefaultNamespace.Mob;
 using Unity.Burst;
 using Unity.Collections;
@@ -5,79 +7,89 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Physics.Systems;
+using Random = Unity.Mathematics.Random;
 
-namespace DefaultNamespace
+[UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
+public partial struct PlayerColliderSystem : ISystem, IDisposable
 {
-    [UpdateInGroup(typeof(AfterPhysicsSystemGroup))]
-    public partial struct PlayerColliderSystem : ISystem
+    private NativeArray<Random> _random;
+
+    [BurstCompile]
+    public void OnCreate(ref SystemState state)
     {
-        private Random _random;
-        
-        [BurstCompile]
-        public void OnCreate(ref SystemState state)
-        {
-            state.RequireForUpdate<PlayerSpawnerComponent>();
-            state.RequireForUpdate<SimulationSingleton>();
-            _random = new Random(1234);
-        }
-
-        [BurstCompile]
-        public void OnUpdate(ref SystemState state)
-        {
-            var simulation = SystemAPI.GetSingleton<SimulationSingleton>();
-            var commandBuffer = new EntityCommandBuffer(Allocator.TempJob);
-            var job = new CollisionJob()
-            {
-                playerComponentLookup = SystemAPI.GetComponentLookup<PlayerComponent>(),
-                mobComponentLookup = SystemAPI.GetComponentLookup<MobComponent>(false), // false for read-write access
-                Random = _random
-            };
+        state.RequireForUpdate<PlayerSpawnerComponent>();
+        state.RequireForUpdate<SimulationSingleton>();
             
-            job.Schedule(simulation, state.Dependency).Complete();
-            commandBuffer.Playback(state.EntityManager);
-            commandBuffer.Dispose();
-        }
+        // システム時刻をシード値として使用
+        _random = new NativeArray<Random>(1, Allocator.Persistent);
+        _random[0] = Random.CreateFromIndex((uint)DateTime.Now.Ticks);
+    }
 
-        [BurstCompile]
-        struct CollisionJob : ICollisionEventsJob
+    public void Dispose()
+    {
+        if (_random.IsCreated)
         {
-            public ComponentLookup<PlayerComponent> playerComponentLookup;
-            [NativeDisableParallelForRestriction]
-            public ComponentLookup<MobComponent> mobComponentLookup;
-            public Random Random;
+            _random.Dispose();
+        }
+    }
+
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        var simulation = SystemAPI.GetSingleton<SimulationSingleton>();
+        var job = new CollisionJob
+        {
+            PlayerComponentLookup = SystemAPI.GetComponentLookup<PlayerComponent>(true),
+            MobComponentLookup = SystemAPI.GetComponentLookup<MobComponent>(),
+            random = _random
+        };
             
-            public void Execute(CollisionEvent collisionEvent)
-            {
-                var entityAIsPlayer = playerComponentLookup.HasComponent(collisionEvent.EntityA);
-                var entityBIsPlayer = playerComponentLookup.HasComponent(collisionEvent.EntityB);
-                var entityAIsMob = mobComponentLookup.HasComponent(collisionEvent.EntityA);
-                var entityBIsMob = mobComponentLookup.HasComponent(collisionEvent.EntityB);
+        state.Dependency = job.Schedule(simulation, state.Dependency);
+        state.Dependency.Complete();
+    }
+
+    [BurstCompile]
+    struct CollisionJob : ICollisionEventsJob
+    {
+        [ReadOnly] public ComponentLookup<PlayerComponent> PlayerComponentLookup;
+        [NativeDisableParallelForRestriction] public ComponentLookup<MobComponent> MobComponentLookup;
+        public NativeArray<Random> random;
+            
+        public void Execute(CollisionEvent collisionEvent)
+        {
+            var entityAIsPlayer = PlayerComponentLookup.HasComponent(collisionEvent.EntityA);
+            var entityBIsPlayer = PlayerComponentLookup.HasComponent(collisionEvent.EntityB);
+            var entityAIsMob = MobComponentLookup.HasComponent(collisionEvent.EntityA);
+            var entityBIsMob = MobComponentLookup.HasComponent(collisionEvent.EntityB);
                 
-                // プレイヤーとモブの衝突を処理
-                if ((entityAIsPlayer && entityBIsMob) || (entityBIsPlayer && entityAIsMob))
-                {
-                    var playerEntity = entityAIsPlayer ? collisionEvent.EntityA : collisionEvent.EntityB;
-                    var mobEntity = entityAIsMob ? collisionEvent.EntityA : collisionEvent.EntityB;
-                    
-                    var player = playerComponentLookup.GetRefRW(playerEntity);
-                    var mob = mobComponentLookup.GetRefRW(mobEntity);
-                    
-                    // プレイヤーの速度が閾値を超えている場合のみモブを死亡させる
-                    if (math.abs(player.ValueRO.currentSpeed) > mob.ValueRO.escapeThreshold)
-                    {
-                        // モブを吹き飛ばす方向を計算（プレイヤーの進行方向に基づく）
-                        var knockbackDirection = math.normalize(math.mul(
-                            quaternion.RotateY(math.radians(
-                                Random.NextFloat(-30f, 30f))), // ランダムな角度のばらつきを追加
-                            player.ValueRO.forward
-                        ));
-                        
-                        // モブの状態を死亡状態に変更
-                        mob.ValueRW.state = MobState.Dying;
-                        mob.ValueRW.currentDirection = knockbackDirection * player.ValueRO.currentSpeed * 2f; // 現在の速度の2倍の力で吹き飛ばす
-                    }
-                }
+            if (!((entityAIsPlayer && entityBIsMob) || (entityBIsPlayer && entityAIsMob)))
+            {
+                return;
             }
+
+            var playerEntity = entityAIsPlayer ? collisionEvent.EntityA : collisionEvent.EntityB;
+            var mobEntity = entityAIsMob ? collisionEvent.EntityA : collisionEvent.EntityB;
+                
+            var player = PlayerComponentLookup.GetRefRO(playerEntity);
+            var mob = MobComponentLookup.GetRefRW(mobEntity);
+                
+            if (math.abs(player.ValueRO.CurrentSpeed) <= mob.ValueRO.escapeThreshold)
+            {
+                return;
+            }
+
+            // Burstコンパイル対応のランダム値生成
+            var randomAngle = random[0].NextFloat(-30f, 30f);
+                
+            // モブを吹き飛ばす方向を計算（プレイヤーの進行方向に基づく）
+            var knockbackDirection = math.normalize(math.mul(
+                quaternion.RotateY(math.radians(randomAngle)),
+                player.ValueRO.Forward
+            ));
+                
+            // モブの状態を死亡状態に変更
+            mob.ValueRW.state = MobState.Dying;
+            mob.ValueRW.currentDirection = knockbackDirection * player.ValueRO.CurrentSpeed * 2f;
         }
     }
 }

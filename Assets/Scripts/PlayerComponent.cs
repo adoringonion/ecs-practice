@@ -3,10 +3,10 @@ using Unity.Mathematics;
 
 public struct PlayerComponent : IComponentData
 {
-    public float currentSpeed;
-    public float maxSpeed;
-    public float acceleration;
-    public float deceleration;
-    public float rotationSpeed;
-    public float3 forward;
+    public float CurrentSpeed;
+    public float MaxSpeed;
+    public float Acceleration;
+    public float Deceleration;
+    public float RotationSpeed;
+    public float3 Forward;
 }

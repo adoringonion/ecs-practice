@@ -1,140 +1,172 @@
+using System;
+using DefaultNamespace.Mob;
 using Unity.Burst;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
+using Random = Unity.Mathematics.Random;
 
-namespace DefaultNamespace.Mob
+namespace Mob
 {
     [UpdateAfter(typeof(PlayerMovementSystem))]
-    public partial struct MobMovementSystem : ISystem
+    public partial struct MobMovementSystem : ISystem, IDisposable
     {
-        private Unity.Mathematics.Random random;
+        private NativeArray<Random> _random;
+        private NativeReference<float3> _playerPosition;
+        private NativeReference<float> _playerSpeed;
 
         [BurstCompile]
         public void OnCreate(ref SystemState state)
         {
             state.RequireForUpdate<PlayerComponent>();
-            random = Unity.Mathematics.Random.CreateFromIndex(1234);
+            
+            _random = new NativeArray<Random>(1, Allocator.Persistent);
+            _random[0] = Random.CreateFromIndex((uint)DateTime.Now.Ticks);
+            
+            _playerPosition = new NativeReference<float3>(float3.zero, Allocator.Persistent);
+            _playerSpeed = new NativeReference<float>(0f, Allocator.Persistent);
         }
-        
+
+        public void Dispose()
+        {
+            if (_random.IsCreated) _random.Dispose();
+            if (_playerPosition.IsCreated) _playerPosition.Dispose();
+            if (_playerSpeed.IsCreated) _playerSpeed.Dispose();
+        }
+
         [BurstCompile]
         public void OnUpdate(ref SystemState state)
         {
             var deltaTime = SystemAPI.Time.DeltaTime;
-            random.InitState((uint)System.DateTime.Now.Ticks);
 
-            // プレイヤーの位置と速度を取得
-            float3 playerPosition = float3.zero;
-            float playerSpeed = 0f;
-            foreach (var (transform, player) in SystemAPI.Query<RefRO<LocalTransform>, RefRO<PlayerComponent>>())
+            // プレイヤー情報を更新
+            state.Dependency = new UpdatePlayerInfoJob
             {
-                playerPosition = transform.ValueRO.Position;
-                playerSpeed = math.abs(player.ValueRO.currentSpeed);
-                break; // 最初のプレイヤーのみを対象とする
-            }
+                PlayerPosition = _playerPosition,
+                PlayerSpeed = _playerSpeed
+            }.Schedule(state.Dependency);
 
-            foreach (var (mob, transform) in SystemAPI.Query<RefRW<MobComponent>, RefRW<LocalTransform>>())
+            // モブの更新
+            state.Dependency = new MobUpdateJob
             {
-                switch (mob.ValueRO.state)
-                {
-                    case MobState.Normal:
-                        UpdateNormalState(mob, transform, deltaTime, playerPosition, playerSpeed);
-                        break;
-                    
-                    case MobState.Escape:
-                        UpdateEscapeState(mob, transform, deltaTime, playerPosition);
-                        break;
-                    
-                    case MobState.Dying:
-                        UpdateDyingState(mob, transform, deltaTime);
-                        break;
-                }
+                DeltaTime = deltaTime,
+                random = _random,
+                PlayerPosition = _playerPosition,
+                PlayerSpeed = _playerSpeed
+            }.Schedule(state.Dependency);
+
+            state.Dependency.Complete();
+        }
+    }
+
+    [BurstCompile]
+    public partial struct UpdatePlayerInfoJob : IJobEntity
+    {
+        public NativeReference<float3> PlayerPosition;
+        public NativeReference<float> PlayerSpeed;
+
+        void Execute(RefRO<LocalTransform> transform, RefRO<PlayerComponent> player)
+        {
+            PlayerPosition.Value = transform.ValueRO.Position;
+            PlayerSpeed.Value = math.abs(player.ValueRO.CurrentSpeed);
+        }
+    }
+
+    [BurstCompile]
+    public partial struct MobUpdateJob : IJobEntity
+    {
+        public float DeltaTime;
+        public NativeArray<Random> random;
+        [ReadOnly] public NativeReference<float3> PlayerPosition;
+        [ReadOnly] public NativeReference<float> PlayerSpeed;
+
+        void Execute(RefRW<MobComponent> mob, RefRW<LocalTransform> transform)
+        {
+            var position = transform.ValueRO.Position;
+            var state = mob.ValueRO.state;
+
+            switch (state)
+            {
+                case MobState.Normal:
+                    UpdateNormalState(ref mob, ref transform, position);
+                    break;
+                case MobState.Escape:
+                    UpdateEscapeState(ref mob, ref transform, position);
+                    break;
+                case MobState.Dying:
+                    UpdateDyingState(ref mob, ref transform);
+                    break;
             }
         }
 
         private void UpdateNormalState(
-            RefRW<MobComponent> mob,
-            RefRW<LocalTransform> transform,
-            float deltaTime,
-            float3 playerPosition,
-            float playerSpeed)
+            ref RefRW<MobComponent> mob,
+            ref RefRW<LocalTransform> transform,
+            float3 position)
         {
-            // プレイヤーとの距離をチェック
-            var distanceToPlayer = math.length(playerPosition - transform.ValueRO.Position);
+            var distanceToPlayer = math.length(PlayerPosition.Value - position);
             
-            // プレイヤーが近くにいて、速度が閾値を超えている場合は逃避状態に移行
-            if (distanceToPlayer < mob.ValueRO.detectionRadius && playerSpeed > mob.ValueRO.escapeThreshold)
+            if (distanceToPlayer < mob.ValueRO.detectionRadius && PlayerSpeed.Value > mob.ValueRO.escapeThreshold)
             {
                 mob.ValueRW.state = MobState.Escape;
                 return;
             }
 
-            // 通常の移動処理
-            mob.ValueRW.timeUntilNextDirectionChange -= deltaTime;
+            mob.ValueRW.timeUntilNextDirectionChange -= DeltaTime;
             if (mob.ValueRO.timeUntilNextDirectionChange <= 0)
             {
-                // ランダムな方向を設定
-                var randomAngle = random.NextFloat(-math.PI, math.PI);
+                var r = random[0];
+                var randomAngle = r.NextFloat(-math.PI, math.PI);
                 mob.ValueRW.currentDirection = new float3(
                     math.cos(randomAngle),
                     0,
                     math.sin(randomAngle)
                 );
-                mob.ValueRW.timeUntilNextDirectionChange = random.NextFloat(0.5f, 2f);
+                mob.ValueRW.timeUntilNextDirectionChange = r.NextFloat(0.5f, 2f);
+                random[0] = r; // 更新された乱数の状態を保存
             }
 
-            // 移動を適用
-            transform.ValueRW.Position += mob.ValueRO.currentDirection * mob.ValueRO.moveSpeed * deltaTime;
+            transform.ValueRW.Position += mob.ValueRO.currentDirection * mob.ValueRO.moveSpeed * DeltaTime;
         }
 
         private void UpdateEscapeState(
-            RefRW<MobComponent> mob,
-            RefRW<LocalTransform> transform,
-            float deltaTime,
-            float3 playerPosition)
+            ref RefRW<MobComponent> mob,
+            ref RefRW<LocalTransform> transform,
+            float3 position)
         {
-            var directionToPlayer = transform.ValueRO.Position - playerPosition;
+            var directionToPlayer = position - PlayerPosition.Value;
             var distanceToPlayer = math.length(directionToPlayer);
 
-            // プレイヤーから十分離れたら通常状態に戻る
             if (distanceToPlayer > mob.ValueRO.detectionRadius * 1.5f)
             {
                 mob.ValueRW.state = MobState.Normal;
                 return;
             }
 
-            // プレイヤーから逃げる方向を設定
             if (distanceToPlayer > 0.1f)
             {
                 mob.ValueRW.currentDirection = math.normalize(directionToPlayer);
             }
 
-            // 逃避速度で移動
-            transform.ValueRW.Position += mob.ValueRW.currentDirection * mob.ValueRO.escapeSpeed * deltaTime;
+            transform.ValueRW.Position += mob.ValueRW.currentDirection * mob.ValueRO.escapeSpeed * DeltaTime;
         }
 
         private void UpdateDyingState(
-            RefRW<MobComponent> mob,
-            RefRW<LocalTransform> transform,
-            float deltaTime)
+            ref RefRW<MobComponent> mob,
+            ref RefRW<LocalTransform> transform)
         {
-            mob.ValueRW.deathTimer -= deltaTime;
+            mob.ValueRW.deathTimer -= DeltaTime;
             
-            // 死亡アニメーション（ここでは単純に回転させる）
             transform.ValueRW.Rotation = math.mul(
                 transform.ValueRO.Rotation,
-                quaternion.RotateY(math.radians(360f * deltaTime))
+                quaternion.RotateY(math.radians(360f * DeltaTime))
             );
 
             if (mob.ValueRO.deathTimer <= 0)
             {
                 mob.ValueRW.state = MobState.Dead;
             }
-        }
-        
-        [BurstCompile]
-        public void OnDestroy(ref SystemState state)
-        {
         }
     }
 }

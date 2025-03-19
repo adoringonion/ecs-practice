@@ -4,8 +4,8 @@ namespace Mob
 {
     public struct MobSpawner : IComponentData
     {
-        public Entity mobPrefabEntity;
-        public float timeUntilNextSpawn;
-        public bool isActive;
+        public Entity MobPrefabEntity;
+        public float TimeUntilNextSpawn;
+        public bool IsActive;
     }
 }
