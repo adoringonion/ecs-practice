@@ -10,33 +10,16 @@ public partial class SetCinemachineTargetSystem : SystemBase
     private CinemachineCamera virtualCamera;
     private PlayerCameraTarget playerCameraTarget;
     private EntityQuery playerQuery;
-    private bool isCameraInitialized = false;
 
     protected override void OnCreate()
     {
-        // PlayerComponentを持つエンティティのクエリを作成
-        playerQuery = GetEntityQuery(ComponentType.ReadOnly<PlayerComponent>(), ComponentType.ReadOnly<LocalTransform>());
-    }
-
-    protected override void OnStartRunning()
-    {
-        base.OnStartRunning();
-        // OnStartRunningはシーンが完全にロードされた後に呼ばれます
-        FindCameraAndTarget();
-    }
-
-    private void FindCameraAndTarget()
-    {
-        // シーン内のVirtualCameraを検索
+        // シーン内のVirtualCameraを検索（必要に応じて特定の名前で検索）
         virtualCamera = Object.FindFirstObjectByType<CinemachineCamera>();
         if (virtualCamera == null)
         {
-            Debug.LogError("CinemachineCameraが見つかりません。自動生成します。");
-            CreateCinemachineCamera();
-        }
-        else
-        {
-            Debug.Log("CinemachineCamera見つかりました: " + virtualCamera.name);
+            Debug.LogError("CinemachineCameraが見つかりません。");
+            // カメラが見つからない場合、カメラを自動生成することもできます
+            // CreateCinemachineCamera();
         }
         
         playerCameraTarget = Object.FindFirstObjectByType<PlayerCameraTarget>();
@@ -47,18 +30,14 @@ public partial class SetCinemachineTargetSystem : SystemBase
             var targetObject = new GameObject("PlayerCameraTarget");
             playerCameraTarget = targetObject.AddComponent<PlayerCameraTarget>();
         }
-        
-        isCameraInitialized = true;
+
+        // PlayerComponentを持つエンティティのクエリを作成
+        playerQuery = GetEntityQuery(ComponentType.ReadOnly<PlayerComponent>(), ComponentType.ReadOnly<LocalTransform>());
     }
 
     protected override void OnUpdate()
     {
-        // カメラがまだ初期化されていない場合、再度試行
-        if (!isCameraInitialized || virtualCamera == null)
-        {
-            FindCameraAndTarget();
-            if (!isCameraInitialized) return;
-        }
+        if (virtualCamera == null || playerCameraTarget == null) return;
         
         // サブシーンを含めたすべてのPlayerエンティティから対象を見つける
         if (playerQuery.CalculateEntityCount() > 0)
@@ -87,7 +66,7 @@ public partial class SetCinemachineTargetSystem : SystemBase
         }
     }
     
-    // カメラが存在しない場合に自動生成するメソッド
+    // オプション: カメラが存在しない場合に自動生成するメソッド
     private void CreateCinemachineCamera()
     {
         var cameraObject = new GameObject("CM Virtual Camera");
@@ -98,6 +77,6 @@ public partial class SetCinemachineTargetSystem : SystemBase
         freeLook.m_Lens.FieldOfView = 60f;
         
         // 必要に応じてカメラの設定を追加
-        Debug.Log("CinemachineCameraを自動生成しました");
+        // 例: Transposerの設定など
     }
 }

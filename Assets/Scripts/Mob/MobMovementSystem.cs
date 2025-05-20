@@ -127,7 +127,15 @@ namespace Mob
                 random[0] = r; // 更新された乱数の状態を保存
             }
 
+            // 移動を適用
             transform.ValueRW.Position += mob.ValueRO.currentDirection * mob.ValueRO.moveSpeed * deltaTime;
+            
+            // 移動方向に向きを設定（アニメーション視覚化のため）
+            if (math.lengthsq(mob.ValueRO.currentDirection) > 0.001f)
+            {
+                quaternion targetRotation = quaternion.LookRotation(mob.ValueRO.currentDirection, new float3(0, 1, 0));
+                transform.ValueRW.Rotation = math.slerp(transform.ValueRO.Rotation, targetRotation, deltaTime * 10f);
+            }
         }
 
         void UpdateEscapeState(
@@ -148,8 +156,16 @@ namespace Mob
             {
                 mob.ValueRW.currentDirection = math.normalize(directionToPlayer);
             }
-
+            
+            // 移動適用
             transform.ValueRW.Position += mob.ValueRW.currentDirection * mob.ValueRO.escapeSpeed * deltaTime;
+            
+            // 逃走方向を向く（素早く回転）
+            if (math.lengthsq(mob.ValueRO.currentDirection) > 0.001f)
+            {
+                quaternion targetRotation = quaternion.LookRotation(mob.ValueRO.currentDirection, new float3(0, 1, 0));
+                transform.ValueRW.Rotation = math.slerp(transform.ValueRO.Rotation, targetRotation, deltaTime * 15f); // 逃走時は素早く回転
+            }
         }
 
         private void UpdateDyingState(

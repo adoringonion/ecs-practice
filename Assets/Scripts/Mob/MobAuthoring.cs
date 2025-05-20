@@ -16,6 +16,10 @@ namespace Mob
         [Header("State Settings")]
         [SerializeField] private float directionChangeInterval = 2f;
         [SerializeField] private float deathDuration = 3f;
+        
+        [Header("Animation Settings")]
+        [SerializeField] private float bobHeight = 0.1f;
+        [SerializeField] private float bobFrequency = 5f;
 
         class MobAuthoringBaker : Baker<MobAuthoring>
         {
@@ -31,7 +35,12 @@ namespace Mob
                     deathTimer = authoring.deathDuration,
                     currentDirection = new Unity.Mathematics.float3(0, 0, 1),
                     detectionRadius = authoring.detectionRadius,
-                    escapeThreshold = authoring.escapeThreshold
+                    escapeThreshold = authoring.escapeThreshold,
+                    
+                    // アニメーション関連パラメータの初期化
+                    bobHeight = 0.1f,
+                    bobFrequency = 5f,
+                    bobPhase = 0f
                 };
                 
                 AddComponent(entity, mobComponent);
