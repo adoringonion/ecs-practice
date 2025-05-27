@@ -318,6 +318,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   animator: {fileID: 5914806501234570713}
+  animatorController: {fileID: 9100000, guid: 23cccd66472cd44e18cf53150006d1c8, type: 2}
   animationBlendTime: 0.2
   speedParameterName: Speed
   isMovingParameterName: IsMoving

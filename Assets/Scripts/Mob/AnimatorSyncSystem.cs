@@ -81,7 +81,8 @@ namespace Mob
             
             foreach (var (entity, animator, reference) in _animators)
             {
-                if (animator == null) continue;
+                if (!animator) continue;
+                if (!animator.isActiveAndEnabled) continue;
                 
                 if (EntityManager.HasComponent<MobAnimationComponent>(entity))
                 {

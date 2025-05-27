@@ -11,7 +11,15 @@ public partial class SetCinemachineTargetSystem : SystemBase
     private PlayerCameraTarget playerCameraTarget;
     private EntityQuery playerQuery;
 
-    protected override void OnCreate()
+
+    protected override void OnStartRunning()
+    {
+        base.OnStartRunning();
+        
+        FindCamera();
+    }
+
+    protected  void FindCamera()
     {
         // シーン内のVirtualCameraを検索（必要に応じて特定の名前で検索）
         virtualCamera = Object.FindFirstObjectByType<CinemachineCamera>();
